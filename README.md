@@ -1,1 +1,1 @@
-This folder gather all my project around AI and chatbot. 
+This folder gather all my projects around AI and chatbot. 
