@@ -6,13 +6,26 @@ from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_groq import ChatGroq
-#from langchain_community.vectorstores import FAISS
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+
 from langchain_community.vectorstores import Chroma
+
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.chains import create_history_aware_retriever
 from langchain.chains import create_retrieval_chain
+from langchain.schema import Document
+from sentence_transformers import SentenceTransformer
+from transformers import AutoTokenizer, AutoModel
+import torch
+# Charger le modèle de sentence-transformers
+#model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 
+
+# Charger le modèle Hugging Face
+model_name = "bert-base-uncased"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModel.from_pretrained(model_name)
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -35,15 +48,39 @@ def get_response(user_input):
 
     return response['answer']
 
+
+# Définir une fonction pour générer les embeddings
+def generate_embeddings(texts):
+    embeddings = model.encode(texts, convert_to_tensor=False).tolist()
+    return embeddings
+
+# Fonction pour générer des embeddings
+def embedding_function(texts):
+    inputs = tokenizer(texts, return_tensors='pt', padding=True, truncation=True)
+    with torch.no_grad():
+        outputs = model(**inputs)
+    embeddings = outputs.last_hidden_state.mean(dim=1)
+    return embeddings.numpy().tolist()
+
 def get_vectorstore_from_url(url):
-    #get the text in vectorStore
     loader = WebBaseLoader(url)
+
     documents = loader.load()
 
+    # Initialiser le Text Splitter
     text_splitter = RecursiveCharacterTextSplitter()
+
+    # Diviser les documents en chunks
     document_chunks = text_splitter.split_documents(documents)
 
-    vector_store = Chroma.from_documents(document_chunks,  OllamaEmbeddings(model="gemma:2b"))
+    # Assurez-vous que chaque chunk est sous forme de texte
+    embeddings = OllamaEmbeddings(model="gemma:2b",)
+                                 
+    # Initialiser Chroma et ajouter les documents avec embeddings
+    vector_store = Chroma.from_documents(
+        document_chunks,
+        embeddings
+    )
     return vector_store
 
 def get_context_retriever_chain(vectore_store):
